@@ -17,6 +17,7 @@ from typing import Literal
 from langgraph.graph import END, START, StateGraph
 
 from services.audit_logger import finalize_run, mark_run_failed
+from services.signalguard_callback import notify_signalguard
 
 from .diagnostic import diagnostic_node
 from .escalation import escalation_node
@@ -51,6 +52,7 @@ def _route_after_remediation(state: TriageState) -> Literal["escalate_node", "fi
 
 async def _finalize_success(state: TriageState) -> TriageState:
     run_id = uuid.UUID(state["run_id"])
+    alert_id = uuid.UUID(state["alert_id"])
     action = state.get("recommended_action", "unknown")
     summary = (
         f"Auto-remediated via `{action}` after {state.get('remediation_attempts', 0)} attempt(s). "
@@ -65,11 +67,13 @@ async def _finalize_success(state: TriageState) -> TriageState:
         failure_modes=state.get("failure_modes"),
         retrieved_runbooks=state.get("retrieved_runbooks"),
     )
+    await notify_signalguard(alert_id, outcome="remediated", summary=summary)
     return {**state, "outcome": "remediated", "summary": summary}
 
 
 async def _finalize_escalated(state: TriageState) -> TriageState:
     run_id = uuid.UUID(state["run_id"])
+    alert_id = uuid.UUID(state["alert_id"])
     summary = (
         f"Escalated to human review. Reason: {state.get('escalation_reason', 'unspecified')}. "
         f"{state.get('knowledge_summary', '')}"
@@ -83,6 +87,7 @@ async def _finalize_escalated(state: TriageState) -> TriageState:
         failure_modes=state.get("failure_modes"),
         retrieved_runbooks=state.get("retrieved_runbooks"),
     )
+    await notify_signalguard(alert_id, outcome="escalated", summary=summary)
     return {**state, "outcome": "escalated", "summary": summary}
 
 

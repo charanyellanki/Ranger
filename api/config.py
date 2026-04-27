@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     chroma_persist_dir: str = "/data/chroma"
     runbooks_dir: str = "/data/runbooks"
 
+    # SignalGuard integration
+    signalguard_api_url: str = ""
+    signalguard_webhook_secret: str = ""
+
     cors_origins: str = "http://localhost:5173"
     log_level: str = "INFO"
 

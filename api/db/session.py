@@ -8,10 +8,21 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from config import get_settings
 
+
+def _normalize_async_url(raw: str) -> str:
+    """Supabase provides ``postgresql://`` URLs; SQLAlchemy async needs the
+    ``postgresql+asyncpg://`` scheme."""
+    if raw.startswith("postgresql+asyncpg://"):
+        return raw
+    if raw.startswith("postgresql://"):
+        return "postgresql+asyncpg://" + raw.removeprefix("postgresql://")
+    return raw
+
+
 _settings = get_settings()
 
 engine = create_async_engine(
-    _settings.database_url,
+    _normalize_async_url(_settings.database_url),
     echo=False,
     pool_pre_ping=True,
     pool_size=10,

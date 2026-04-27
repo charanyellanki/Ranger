@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_settings
-from routes import agent_runs, alerts, runbooks, settings, websocket
+from routes import agent_runs, alerts, runbooks, settings, webhooks, websocket
 
 _settings = get_settings()
 logging.basicConfig(level=_settings.log_level, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -47,4 +47,5 @@ app.include_router(alerts.router)
 app.include_router(agent_runs.router)
 app.include_router(runbooks.router)
 app.include_router(settings.router)
+app.include_router(webhooks.router)
 app.include_router(websocket.router)

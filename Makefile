@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 COMPOSE := docker compose
 
-.PHONY: help up down restart logs logs-api ps build seed-runbooks migrate test-alert clean fmt lint
+.PHONY: help up down restart logs logs-api ps build seed-runbooks migrate test-alert clean
 
 help:
 	@awk 'BEGIN {FS = ":.*##"; printf "\nTargets:\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)

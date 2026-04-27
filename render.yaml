@@ -1,0 +1,50 @@
+# Render Blueprint — single web service pulling a pre-built image from GHCR.
+#
+# Setup (one-time, via Render dashboard):
+#   1. Create the web service using this blueprint OR manually.
+#   2. Under Settings → Image, set the image URL to:
+#        ghcr.io/<github-owner>/ranger-api:latest
+#   3. Add GHCR registry credentials (Settings → Registry Credentials):
+#        Registry: ghcr.io
+#        Username: <github-username>
+#        Password: a GitHub PAT with read:packages scope
+#   4. Copy the Deploy Hook URL from Settings → Deploy Hook and save it
+#      as RENDER_DEPLOY_HOOK_API in your GitHub repo secrets.
+#   5. Fill in all env vars marked sync: false via the Render dashboard.
+#
+# Deploy flow:
+#   push to main → GitHub Actions builds image → pushes to GHCR →
+#   triggers Render deploy hook → Render pulls :latest → deploys.
+
+services:
+  - type: web
+    name: ranger-api
+    runtime: image
+    image:
+      # Replace <github-owner> with your GitHub username or org (lowercase).
+      url: ghcr.io/<github-owner>/ranger-api:latest
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: RANGER_ENCRYPTION_KEY
+        sync: false
+      - key: ADMIN_TOKEN
+        sync: false
+      - key: SIGNALGUARD_API_URL
+        sync: false
+      - key: SIGNALGUARD_WEBHOOK_SECRET
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: LOG_LEVEL
+        value: INFO
+      - key: RUNBOOKS_DIR
+        value: /data/runbooks
+      - key: CHROMA_PERSIST_DIR
+        value: /data/chroma
+    disk:
+      name: chroma-data
+      mountPath: /data/chroma
+      sizeGB: 1

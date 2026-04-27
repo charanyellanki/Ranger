@@ -1,0 +1,122 @@
+name: Build, push, deploy (Render + GHCR)
+
+# Deploys the single ranger-api web service.
+# Flow: build Docker image → push to GHCR → trigger Render deploy hook →
+#       Render pulls ghcr.io/<owner>/ranger-api:latest and redeploys.
+#
+# Required GitHub repo secrets:
+#   RENDER_DEPLOY_HOOK_API  – Render deploy hook URL for ranger-api service
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+    inputs:
+      rebuild_all:
+        description: "Force build/push image and trigger Render deploy hook"
+        type: boolean
+        default: false
+      skip_render:
+        description: "Only build/push image to GHCR; do not call Render deploy hook"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_push_deploy:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE_TAG: ${{ github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed paths
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            workflows:
+              - '.github/workflows/**'
+            api:
+              - 'api/**'
+              - 'data/runbooks/**'
+              - 'Dockerfile.render'
+
+      - name: Should build?
+        id: should
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.rebuild_all }}" == "true" ]]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ steps.changes.outputs.api }}" == "true" || "${{ steps.changes.outputs.workflows }}" == "true" ]]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compute lowercase GHCR owner
+        if: steps.should.outputs.build == 'true'
+        id: meta
+        shell: bash
+        run: |
+          owner_lc="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+          echo "ghcr_owner_lc=${owner_lc}" >> "${GITHUB_OUTPUT}"
+          echo "image=ghcr.io/${owner_lc}/ranger-api" >> "${GITHUB_OUTPUT}"
+
+      - name: Set up QEMU
+        if: steps.should.outputs.build == 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: steps.should.outputs.build == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: steps.should.outputs.build == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Single image: FastAPI + LangGraph agents + RAG indexer + runbooks
+      - name: Build & push ranger-api
+        if: steps.should.outputs.build == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.render
+          push: true
+          provenance: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ env.IMAGE_TAG }}
+            ${{ steps.meta.outputs.image }}:latest
+
+      # Render web service is configured to pull <image>:latest from GHCR.
+      # The deploy hook tells Render a new image is available.
+      - name: Trigger Render deploy
+        if: |
+          steps.should.outputs.build == 'true' &&
+          (github.event_name != 'workflow_dispatch' || inputs.skip_render != 'true')
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_API }}
+        run: |
+          if [ -z "${RENDER_DEPLOY_HOOK}" ]; then
+            echo "::warning::RENDER_DEPLOY_HOOK_API secret not set; skipping Render deploy"
+            exit 0
+          fi
+          echo "Triggering Render deploy for ranger-api…"
+          curl -fsSL -X POST "${RENDER_DEPLOY_HOOK}"
+          echo "Render deploy hook triggered."

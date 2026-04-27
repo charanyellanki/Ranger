@@ -36,7 +36,6 @@ The point of this project is to demonstrate a set of production-shaped patterns 
                                  └─────────────────┘
 ```
 
-A proper diagram lives at [docs/architecture.png](docs/architecture.png) (placeholder until rendered).
 
 ## Agent flow
 
